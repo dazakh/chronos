@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Хронометраж по А. Любищеву</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #f8fafc; /* slate-50 */
+            color: #0f172a; /* slate-900 */
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        /* Аккуратный минималистичный скроллбар */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        .fade-in {
+            animation: fadeIn 0.18s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(3px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            opacity: 0.55;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased selection:bg-slate-900 selection:text-white">
+
+    <!-- Основной узкий мобильный контейнер по центру экрана в чистой белой теме -->
+    <div class="max-w-md mx-auto min-h-screen bg-white border-x border-slate-200/80 flex flex-col relative pb-24 shadow-sm">
+        
+        <!-- Верхняя шапка приложения -->
+        <header class="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-100 px-4 py-3.5 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200/70 flex items-center justify-center text-slate-800">
+                    <i data-lucide="hourglass" class="w-4 h-4"></i>
+                </div>
+                <div>
+                    <h1 class="text-sm font-bold tracking-tight text-slate-900 leading-none">Метод Любищева</h1>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Учет чистого времени «нетто»</p>
+                </div>
+            </div>
+            <div id="demoBadge" class="hidden">
+                <span class="px-2.5 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200 rounded-full">
+                    Демо-база
+                </span>
+            </div>
+        </header>
+
+        <!-- Контейнер вкладок -->
+        <main class="flex-1 p-4 space-y-4">
+
+            <!-- ==================== ВКЛАДКА 1: ВВОД ==================== -->
+            <section id="tab-entry" class="tab-section space-y-4 fade-in">
+                
+                <!-- Переключатель даты и прогресс за день -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div class="flex items-center justify-between gap-1">
+                        <button id="btnPrevDay" class="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-medium text-slate-600 border border-slate-200/60 flex items-center gap-1 transition">
+                            <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i> Вчера
+                        </button>
+                        
+                        <div class="flex items-center gap-1.5 relative">
+                            <button id="btnToday" class="px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-800 hover:bg-slate-200/70 text-xs font-semibold transition">
+                                Сегодня
+                            </button>
+                            <input type="date" id="entryDateInput" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-medium rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-slate-400">
+                        </div>
+
+                        <button id="btnNextDay" class="px-2.5 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-medium text-slate-600 border border-slate-200/60 flex items-center gap-1 transition">
+                            Завтра <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+
+                    <!-- Информация о выбранном дне и мульти-прогрессбар -->
+                    <div>
+                        <div class="flex justify-between items-baseline mb-1.5">
+                            <span id="selectedDateFormatted" class="text-xs font-medium text-slate-500">Сегодня</span>
+                            <span class="text-xs font-medium text-slate-500">
+                                Учтено: <span id="dayTotalFormatted" class="text-slate-900 font-bold">0 ч 00 мин</span>
+                            </span>
+                        </div>
+                        <!-- Составная полоса прогресса (из расчета ~16 часов бодрствования = 960 мин) -->
+                        <div id="dayProgressBar" class="w-full h-2 bg-slate-100 rounded-full overflow-hidden flex">
+                            <!-- Сегменты рендерятся через JS -->
+                        </div>
+                        <div id="dayCategoryLegend" class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-500">
+                            <!-- Мини-легенда за день -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Шаг 1: Выбор Группы и Подкатегории -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">1. Категория и подкатегория</span>
+                        <span id="selectedCategoryLabel" class="text-xs text-slate-700 font-medium truncate max-w-[180px]"></span>
+                    </div>
+
+                    <!-- Крупные кнопки групп 1-го уровня -->
+                    <div id="groupButtonsGrid" class="grid grid-cols-2 gap-2">
+                        <!-- Заполняется из JS -->
+                    </div>
+
+                    <!-- Пилюли подкатегорий 2-го уровня -->
+                    <div class="pt-1">
+                        <div id="subcategoryPillsContainer" class="flex flex-wrap gap-1.5">
+                            <!-- Заполняется из JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Шаг 2: Конструктор длительности -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">2. Чистое время (нетто)</span>
+                        <button id="btnMinus15" class="text-xs text-slate-500 hover:text-slate-800 px-2 py-0.5 rounded-lg bg-slate-100 active:scale-95 transition">
+                            -15м
+                        </button>
+                    </div>
+
+                    <!-- Дисплей набранной длительности -->
+                    <div class="bg-slate-50 border border-slate-200/70 rounded-xl py-3 px-4 flex items-center justify-between">
+                        <div>
+                            <div id="durationDisplayBig" class="text-2xl font-bold tracking-tight text-slate-900">0 ч 45 мин</div>
+                            <div id="durationDisplayMinutes" class="text-[11px] text-slate-400">Всего: 45 минут</div>
+                        </div>
+                        <button id="btnResetDuration" class="px-3 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-600 border border-slate-200/90 text-xs font-medium active:scale-95 transition flex items-center gap-1">
+                            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Сброс
+                        </button>
+                    </div>
+
+                    <!-- Кнопки быстрого набора -->
+                    <div class="grid grid-cols-5 gap-1.5">
+                        <button data-add-min="5" class="dur-btn py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-semibold text-slate-700 border border-slate-200/80 transition">+5м</button>
+                        <button data-add-min="15" class="dur-btn py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-semibold text-slate-700 border border-slate-200/80 transition">+15м</button>
+                        <button data-add-min="30" class="dur-btn py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-95 text-xs font-semibold text-slate-700 border border-slate-200/80 transition">+30м</button>
+                        <button data-add-min="60" class="dur-btn py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/70 active:scale-95 text-xs font-semibold text-slate-900 border border-slate-300/80 transition">+1ч</button>
+                        <button data-add-min="120" class="dur-btn py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/70 active:scale-95 text-xs font-semibold text-slate-900 border border-slate-300/80 transition">+2ч</button>
+                    </div>
+                </div>
+
+                <!-- Шаг 3: Заметка и кнопка сохранения -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div>
+                        <label for="entryNoteInput" class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">3. Заметка (что именно сделано)</label>
+                        <input type="text" id="entryNoteInput" placeholder="Напр.: Глава 4 книги, рефакторинг модуля..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition">
+                    </div>
+                    <button id="btnSaveEntry" class="w-full py-3 rounded-xl bg-slate-900 hover:bg-slate-800 active:scale-[0.99] text-white font-semibold text-sm shadow-xs flex items-center justify-center gap-2 transition">
+                        <i data-lucide="check" class="w-4 h-4"></i>
+                        <span>Записать в хронометраж</span>
+                    </button>
+                </div>
+
+                <!-- Список записей за выбранный день -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Записи за выбранный день</h2>
+                        <span id="dayEntriesCount" class="text-[11px] text-slate-400">0 зап.</span>
+                    </div>
+                    <div id="todayEntriesList" class="space-y-2">
+                        <!-- Заполняется через JS -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== ВКЛАДКА 2: ЖУРНАЛ ==================== -->
+            <section id="tab-journal" class="tab-section hidden space-y-4 fade-in">
+                <!-- Панель фильтров -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-slate-900">Журнал хронометража</h2>
+                        <span id="journalSummaryBadge" class="text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">0 ч</span>
+                    </div>
+                    
+                    <!-- Фильтр периода -->
+                    <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-xl">
+                        <button data-jperiod="week" class="j-period-btn py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-2xs transition">7 дней</button>
+                        <button data-jperiod="month" class="j-period-btn py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900 transition">Месяц</button>
+                        <button data-jperiod="all" class="j-period-btn py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900 transition">Все время</button>
+                    </div>
+
+                    <!-- Фильтр по группе -->
+                    <div>
+                        <label for="journalGroupFilter" class="block text-[11px] text-slate-400 mb-1">Фильтр по основной группе:</label>
+                        <select id="journalGroupFilter" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400">
+                            <option value="all">Все группы категорий</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Сгруппированный по дням список -->
+                <div id="journalDaysContainer" class="space-y-3">
+                    <!-- Заполняется через JS -->
+                </div>
+            </section>
+
+            <!-- ==================== ВКЛАДКА 3: АНАЛИТИКА ==================== -->
+            <section id="tab-analytics" class="tab-section hidden space-y-4 fade-in">
+                
+                <!-- Переключатель периода Неделя / Месяц -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3 flex items-center justify-between shadow-xs">
+                    <span class="text-xs font-semibold text-slate-700 pl-1">Период отчета:</span>
+                    <div class="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl w-48">
+                        <button data-aperiod="week" class="a-period-btn py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-2xs transition">Неделя</button>
+                        <button data-aperiod="month" class="a-period-btn py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900 transition">Месяц</button>
+                    </div>
+                </div>
+
+                <!-- Карточки KPI -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-xs">
+                        <div class="text-[11px] text-slate-400">Всего учтено</div>
+                        <div id="kpiTotalHours" class="text-base font-bold text-slate-900 mt-0.5">0 ч</div>
+                        <div id="kpiDaysCount" class="text-[10px] text-slate-400 mt-0.5">0 актив. дн.</div>
+                    </div>
+                    <div class="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-xs">
+                        <div class="text-[11px] text-slate-400">Среднее / день</div>
+                        <div id="kpiAvgDay" class="text-base font-bold text-slate-900 mt-0.5">0 ч</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">нетто в сутки</div>
+                    </div>
+                    <div class="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-xs">
+                        <div class="text-[11px] text-slate-400">Группы I + II</div>
+                        <div id="kpiProductiveShare" class="text-base font-bold text-emerald-600 mt-0.5">0%</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">работа и развитие</div>
+                    </div>
+                </div>
+
+                <!-- Блок «План / Факт на месяц» -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">План / Факт на месяц</h3>
+                            <p id="planMonthTitle" class="text-xs font-medium text-slate-700 mt-0.5">За текущий календарный месяц</p>
+                        </div>
+                        <i data-lucide="target" class="w-4 h-4 text-slate-400"></i>
+                    </div>
+                    <div id="planFactContainer" class="space-y-3">
+                        <!-- Полоски прогресса по каждой группе -->
+                    </div>
+                </div>
+
+                <!-- Круговая диаграмма распределения времени -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <h3 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Структура затрат времени</h3>
+                    <div class="relative h-56 w-full flex items-center justify-center">
+                        <canvas id="doughnutChart"></canvas>
+                    </div>
+                    <!-- Детализация по подкатегориям -->
+                    <div id="analyticsSubcatTable" class="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                        <!-- Заполняется через JS -->
+                    </div>
+                </div>
+
+                <!-- Столбчатый график по дням -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <h3 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Динамика по дням (часы)</h3>
+                    <div class="relative h-60 w-full">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== ВКЛАДКА 4: НАСТРОЙКИ ==================== -->
+            <section id="tab-settings" class="tab-section hidden space-y-4 fade-in">
+                
+                <!-- Управление категориями и месячными планами -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900">Категории и планы часов</h2>
+                            <p class="text-[11px] text-slate-400">Двухуровневая система учета</p>
+                        </div>
+                    </div>
+
+                    <!-- Список существующих групп и их подкатегорий -->
+                    <div id="settingsCategoriesList" class="space-y-2.5">
+                        <!-- Генерируется через JS -->
+                    </div>
+
+                    <!-- Форма добавления новой подкатегории в существующую группу -->
+                    <div class="pt-3 border-t border-slate-100 space-y-2">
+                        <h3 class="text-xs font-semibold text-slate-700">Добавить подкатегорию</h3>
+                        <select id="newSubcatParentSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400">
+                            <!-- Опции групп -->
+                        </select>
+                        <div class="flex gap-2">
+                            <input type="text" id="newSubcatNameInput" placeholder="Название подкатегории..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400">
+                            <button id="btnAddSubcat" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition">
+                                Добавить
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Форма добавления новой основной группы -->
+                    <div class="pt-3 border-t border-slate-100 space-y-2">
+                        <h3 class="text-xs font-semibold text-slate-700">Добавить новую группу (Уровень 1)</h3>
+                        <input type="text" id="newGroupNameInput" placeholder="Напр.: V. Общественная деятельность" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400">
+                        <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                                <label for="newGroupColorInput" class="text-[11px] text-slate-500">Цвет:</label>
+                                <input type="color" id="newGroupColorInput" value="#8b5cf6" class="w-6 h-6 rounded cursor-pointer bg-transparent border-0">
+                            </div>
+                            <div class="flex-1 flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+                                <label for="newGroupGoalInput" class="text-[11px] text-slate-500">План/мес (ч):</label>
+                                <input type="number" id="newGroupGoalInput" value="30" min="1" max="500" class="w-full bg-transparent text-xs text-slate-900 font-semibold focus:outline-none">
+                            </div>
+                            <button id="btnAddGroup" class="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition">
+                                Создать
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Экспорт и резервное копирование -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                    <h2 class="text-sm font-bold text-slate-900">Экспорт и резервная копия</h2>
+                    <p class="text-[11px] text-slate-400">Все данные хранятся локально в вашем браузере.</p>
+
+                    <button id="btnExportCSV" class="w-full py-2.5 px-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-semibold flex items-center justify-between border border-slate-200/90 transition">
+                        <span class="flex items-center gap-2">
+                            <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+                            Выгрузить историю в CSV (Excel / Таблицы)
+                        </span>
+                        <i data-lucide="download" class="w-3.5 h-3.5 text-slate-400"></i>
+                    </button>
+
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <button id="btnExportJSON" class="py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-200/90 transition">
+                            <i data-lucide="save" class="w-3.5 h-3.5 text-slate-600"></i>
+                            Сохранить JSON
+                        </button>
+                        <label class="py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 border border-slate-200/90 cursor-pointer transition">
+                            <i data-lucide="upload" class="w-3.5 h-3.5 text-slate-600"></i>
+                            Загрузить JSON
+                            <input type="file" id="inputImportJSON" accept=".json,application/json" class="hidden">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Управление тестовыми данными -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                    <h2 class="text-sm font-bold text-slate-900">Служебные действия</h2>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button id="btnClearDemoData" class="w-full py-2.5 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100/80 text-rose-600 border border-rose-200 text-xs font-semibold flex items-center justify-center gap-2 transition">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            Очистить тестовые / все записи журнала
+                        </button>
+                        <button id="btnRestoreDemoData" class="w-full py-2 px-3.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/80 text-xs font-medium flex items-center justify-center gap-2 transition">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-500"></i>
+                            Заполнить тестовыми записями за 5 дней
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Нижнее фиксированное меню навигации (4 вкладки) -->
+        <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-2 py-1.5 z-40">
+            <div class="grid grid-cols-4 gap-1">
+                <button data-tab="entry" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-900 bg-slate-100 font-semibold transition">
+                    <i data-lucide="plus-circle" class="w-5 h-5 mb-0.5"></i>
+                    <span class="text-[11px]">Ввод</span>
+                </button>
+                <button data-tab="journal" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-400 hover:text-slate-700 font-medium transition">
+                    <i data-lucide="book-open" class="w-5 h-5 mb-0.5"></i>
+                    <span class="text-[11px]">Журнал</span>
+                </button>
+                <button data-tab="analytics" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-400 hover:text-slate-700 font-medium transition">
+                    <i data-lucide="pie-chart" class="w-5 h-5 mb-0.5"></i>
+                    <span class="text-[11px]">Аналитика</span>
+                </button>
+                <button data-tab="settings" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-400 hover:text-slate-700 font-medium transition">
+                    <i data-lucide="sliders" class="w-5 h-5 mb-0.5"></i>
+                    <span class="text-[11px]">Настройки</span>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Всплывающее уведомление (Toast) -->
+        <div id="toastContainer" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-200 opacity-0 -translate-y-2">
+            <div id="toastMessage" class="bg-slate-900 text-white px-4 py-2 rounded-full shadow-lg text-xs font-medium flex items-center gap-2">
+                <span>Сохранено</span>
+            </div>
+        </div>
+
+        <!-- Модальное окно редактирования записи -->
+        <div id="editModal" class="fixed inset-0 z-50 bg-slate-900/30 backdrop-blur-xs hidden items-center justify-center p-4">
+            <div class="bg-white border border-slate-200 rounded-2xl w-full max-w-sm p-4 space-y-3 shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <h3 class="text-sm font-bold text-slate-900">Редактировать запись</h3>
+                    <button id="btnCloseEditModal" class="text-slate-400 hover:text-slate-700 p-1">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <input type="hidden" id="editEntryId">
+                <div class="space-y-2.5 text-xs">
+                    <div>
+                        <label class="block text-slate-500 mb-1">Дата:</label>
+                        <input type="date" id="editEntryDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900">
+                    </div>
+                    <div>
+                        <label class="block text-slate-500 mb-1">Группа:</label>
+                        <select id="editEntryGroup" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"></select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-500 mb-1">Подкатегория:</label>
+                        <select id="editEntrySubcat" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900"></select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-500 mb-1">Длительность (в минутах):</label>
+                        <input type="number" id="editEntryMinutes" min="5" max="1440" step="5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-semibold">
+                    </div>
+                    <div>
+                        <label class="block text-slate-500 mb-1">Заметка:</label>
+                        <input type="text" id="editEntryNote" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900">
+                    </div>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button id="btnCancelEdit" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Отмена</button>
+                    <button id="btnSaveEdit" class="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно подтверждения действия -->
+        <div id="confirmModal" class="fixed inset-0 z-50 bg-slate-900/30 backdrop-blur-xs hidden items-center justify-center p-4">
+            <div class="bg-white border border-slate-200 rounded-2xl w-full max-w-xs p-4 space-y-3 shadow-xl text-center">
+                <div class="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+                <h3 id="confirmModalTitle" class="text-sm font-bold text-slate-900">Подтвердите действие</h3>
+                <p id="confirmModalText" class="text-xs text-slate-500"></p>
+                <div class="flex gap-2 pt-1">
+                    <button id="btnConfirmCancel" class="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold">Отмена</button>
+                    <button id="btnConfirmOk" class="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /**
+         * Ключ хранения в localStorage
+         */
+        const STORAGE_KEY = 'lyubishchev_tracker_v1';
+
+        /**
+         * Вспомогательные функции работы с локальной датой в формате ГГГГ-ММ-ДД
+         */
+        function getLocalDateString(dateObj = new Date()) {
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function shiftDateString(yyyyMmDd, deltaDays) {
+            const [y, m, d] = yyyyMmDd.split('-').map(Number);
+            const dt = new Date(y, m - 1, d);
+            dt.setDate(dt.getDate() + deltaDays);
+            return getLocalDateString(dt);
+        }
+
+        function formatHumanDate(yyyyMmDd) {
+            const today = getLocalDateString();
+            const yesterday = shiftDateString(today, -1);
+            const tomorrow = shiftDateString(today, 1);
+
+            const [y, m, d] = yyyyMmDd.split('-').map(Number);
+            const dt = new Date(y, m - 1, d);
+            const formatted = dt.toLocaleDateString('ru-RU', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short'
+            });
+
+            if (yyyyMmDd === today) return `Сегодня, ${formatted}`;
+            if (yyyyMmDd === yesterday) return `Вчера, ${formatted}`;
+            if (yyyyMmDd === tomorrow) return `Завтра, ${formatted}`;
+            return formatted;
+        }
+
+        function formatMinutes(totalMin) {
+            const mins = Math.max(0, Math.round(totalMin));
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            if (h === 0) return `${m} мин`;
+            if (m === 0) return `${h} ч`;
+            return `${h} ч ${String(m).padStart(2, '0')} мин`;
+        }
+
+        function formatHoursDecimal(totalMin) {
+            return (totalMin / 60).toFixed(1).replace('.0', '');
+        }
+
+        /**
+         * Базовые двухуровневые категории по умолчанию
+         */
+        function getDefaultCategories() {
+            return [
+                {
+                    id: 'grp-1',
+                    name: 'I. Основная работа',
+                    color: '#4f46e5', // Indigo 600
+                    monthlyGoalHours: 120,
+                    subcategories: [
+                        { id: 'sub-101', name: 'Проекты и код' },
+                        { id: 'sub-102', name: 'Аналитика и тексты' },
+                        { id: 'sub-103', name: 'Планирование и созвоны' }
+                    ]
+                },
+                {
+                    id: 'grp-2',
+                    name: 'II. Самообразование',
+                    color: '#059669', // Emerald 600
+                    monthlyGoalHours: 45,
+                    subcategories: [
+                        { id: 'sub-201', name: 'Чтение нон-фикшн' },
+                        { id: 'sub-202', name: 'Изучение языков' },
+                        { id: 'sub-203', name: 'Лекции и конспекты' }
+                    ]
+                },
+                {
+                    id: 'grp-3',
+                    name: 'III. Быт и рутина',
+                    color: '#d97706', // Amber 600
+                    monthlyGoalHours: 60,
+                    subcategories: [
+                        { id: 'sub-301', name: 'Дорога и транспорт' },
+                        { id: 'sub-302', name: 'Домашние дела и готовка' },
+                        { id: 'sub-303', name: 'Покупки и поручения' }
+                    ]
+                },
+                {
+                    id: 'grp-4',
+                    name: 'IV. Отдых и спорт',
+                    color: '#0284c7', // Sky 600
+                    monthlyGoalHours: 50,
+                    subcategories: [
+                        { id: 'sub-401', name: 'Тренировка и бег' },
+                        { id: 'sub-402', name: 'Прогулка на воздухе' },
+                        { id: 'sub-403', name: 'Общение и досуг' }
+                    ]
+                }
+            ];
+        }
+
+        /**
+         * Генерация реалистичных тестовых записей за последние 5 дней
+         */
+        function generateSeedEntries() {
+            const today = getLocalDateString();
+            const d0 = today;
+            const d1 = shiftDateString(today, -1);
+            const d2 = shiftDateString(today, -2);
+            const d3 = shiftDateString(today, -3);
+            const d4 = shiftDateString(today, -4);
+
+            const raw = [
+                // 4 дня назад
+                { date: d4, groupId: 'grp-1', subId: 'sub-101', min: 180, note: 'Разработка архитектуры модуля' },
+                { date: d4, groupId: 'grp-1', subId: 'sub-103', min: 45, note: 'Синхронизация по задачам недели' },
+                { date: d4, groupId: 'grp-2', subId: 'sub-201', min: 60, note: 'Д. Гранин «Эта странная жизнь»' },
+                { date: d4, groupId: 'grp-3', subId: 'sub-302', min: 50, note: 'Приготовление ужина и уборка' },
+                { date: d4, groupId: 'grp-4', subId: 'sub-401', min: 60, note: 'Силовая тренировка в зале' },
+
+                // 3 дня назад
+                { date: d3, groupId: 'grp-1', subId: 'sub-101', min: 210, note: 'Верстка интерфейса и отладка' },
+                { date: d3, groupId: 'grp-2', subId: 'sub-202', min: 45, note: 'Практика лексики и аудирование' },
+                { date: d3, groupId: 'grp-3', subId: 'sub-301', min: 60, note: 'Поездка в центр и обратно' },
+                { date: d3, groupId: 'grp-4', subId: 'sub-402', min: 45, note: 'Вечерняя прогулка в парке' },
+
+                // 2 дня назад
+                { date: d2, groupId: 'grp-1', subId: 'sub-102', min: 150, note: 'Подготовка аналитического отчета' },
+                { date: d2, groupId: 'grp-1', subId: 'sub-101', min: 90, note: 'Ревью кода и правки' },
+                { date: d2, groupId: 'grp-2', subId: 'sub-203', min: 75, note: 'Конспект лекции по системному мышлению' },
+                { date: d2, groupId: 'grp-3', subId: 'sub-303', min: 40, note: 'Закупка продуктов на неделю' },
+                { date: d2, groupId: 'grp-4', subId: 'sub-403', min: 90, note: 'Встреча с друзьями за чаем' },
+
+                // Вчера
+                { date: d1, groupId: 'grp-1', subId: 'sub-101', min: 195, note: 'Интеграция графиков и тестирование' },
+                { date: d1, groupId: 'grp-2', subId: 'sub-201', min: 60, note: 'Чтение профессиональной литературы' },
+                { date: d1, groupId: 'grp-3', subId: 'sub-302', min: 45, note: 'Бытовые дела по дому' },
+                { date: d1, groupId: 'grp-4', subId: 'sub-401', min: 50, note: 'Пробежка 7 км в спокойном темпе' },
+
+                // Сегодня
+                { date: d0, groupId: 'grp-1', subId: 'sub-102', min: 120, note: 'Работа над ключевой задачей дня' },
+                { date: d0, groupId: 'grp-2', subId: 'sub-201', min: 45, note: 'Утреннее чтение и заметки' },
+                { date: d0, groupId: 'grp-4', subId: 'sub-402', min: 30, note: 'Разминка и прогулка днем' }
+            ];
+
+            return raw.map((item, idx) => ({
+                id: 'seed-' + (idx + 1) + '-' + Date.now(),
+                date: item.date,
+                groupId: item.groupId,
+                subcategoryId: item.subId,
+                durationMinutes: item.min,
+                note: item.note,
+                createdAt: Date.now() - (raw.length - idx) * 3600000
+            }));
+        }
+
+        /**
+         * Глобальное состояние приложения
+         */
+        let state = {
+            categories: [],
+            entries: [],
+            isDemoData: false,
+            ui: {
+                activeTab: 'entry',
+                selectedDate: getLocalDateString(),
+                selectedGroupId: 'grp-1',
+                selectedSubcategoryId: 'sub-101',
+                currentDurationMinutes: 45,
+                journalPeriod: 'week',
+                journalGroupFilter: 'all',
+                analyticsPeriod: 'week'
+            }
+        };
+
+        // Экземпляры графиков Chart.js
+        let doughnutChartInstance = null;
+        let barChartInstance = null;
+
+        /**
+         * Загрузка и сохранение в localStorage
+         */
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    state.categories = Array.isArray(parsed.categories) && parsed.categories.length
+                        ? parsed.categories
+                        : getDefaultCategories();
+                    state.entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+                    state.isDemoData = Boolean(parsed.isDemoData);
+                } else {
+                    state.categories = getDefaultCategories();
+                    state.entries = generateSeedEntries();
+                    state.isDemoData = true;
+                    saveState();
+                }
+            } catch (e) {
+                console.error('Ошибка чтения localStorage:', e);
+                state.categories = getDefaultCategories();
+                state.entries = generateSeedEntries();
+                state.isDemoData = true;
+            }
+
+            ensureValidSelection();
+        }
+
+        function saveState() {
+            try {
+                const payload = {
+                    categories: state.categories,
+                    entries: state.entries,
+                    isDemoData: state.isDemoData
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+                updateDemoBadge();
+            } catch (e) {
+                console.error('Ошибка сохранения в localStorage:', e);
+            }
+        }
+
+        function ensureValidSelection() {
+            if (!state.categories.length) {
+                state.categories = getDefaultCategories();
+            }
+            let group = state.categories.find(g => g.id === state.ui.selectedGroupId);
+            if (!group) {
+                group = state.categories[0];
+                state.ui.selectedGroupId = group.id;
+            }
+            let sub = group.subcategories.find(s => s.id === state.ui.selectedSubcategoryId);
+            if (!sub) {
+                state.ui.selectedSubcategoryId = group.subcategories[0]?.id || '';
+            }
+        }
+
+        function getGroupById(groupId) {
+            return state.categories.find(g => g.id === groupId) || {
+                id: groupId,
+                name: 'Без группы',
+                color: '#64748b',
+                monthlyGoalHours: 0,
+                subcategories: []
+            };
+        }
+
+        function getSubcategoryById(groupId, subId) {
+            const grp = getGroupById(groupId);
+            return grp.subcategories.find(s => s.id === subId) || {
+                id: subId,
+                name: 'Общее'
+            };
+        }
+
+        function showToast(text) {
+            const container = document.getElementById('toastContainer');
+            const msg = document.getElementById('toastMessage');
+            msg.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span>${text}</span>`;
+            lucide.createIcons();
+            container.classList.remove('opacity-0', '-translate-y-2');
+            container.classList.add('opacity-100', 'translate-y-0');
+            clearTimeout(window.__toastTimer);
+            window.__toastTimer = setTimeout(() => {
+                container.classList.add('opacity-0', '-translate-y-2');
+                container.classList.remove('opacity-100', 'translate-y-0');
+            }, 2200);
+        }
+
+        function updateDemoBadge() {
+            const badge = document.getElementById('demoBadge');
+            if (state.isDemoData && state.entries.length > 0) {
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Рендер Вкладки 1: «Ввод»
+         */
+        function renderEntryTab() {
+            ensureValidSelection();
+
+            const dateInput = document.getElementById('entryDateInput');
+            dateInput.value = state.ui.selectedDate;
+            document.getElementById('selectedDateFormatted').textContent = formatHumanDate(state.ui.selectedDate);
+
+            // Записи за выбранный день
+            const dayEntries = state.entries
+                .filter(e => e.date === state.ui.selectedDate)
+                .sort((a, b) => b.createdAt - a.createdAt);
+
+            const totalDayMin = dayEntries.reduce((acc, e) => acc + e.durationMinutes, 0);
+            document.getElementById('dayTotalFormatted').textContent = formatMinutes(totalDayMin);
+            document.getElementById('dayEntriesCount').textContent = `${dayEntries.length} зап.`;
+
+            // Мульти-прогрессбар
+            const barContainer = document.getElementById('dayProgressBar');
+            const legendContainer = document.getElementById('dayCategoryLegend');
+            barContainer.innerHTML = '';
+            legendContainer.innerHTML = '';
+
+            const normBase = Math.max(960, totalDayMin);
+            state.categories.forEach(grp => {
+                const grpMin = dayEntries
+                    .filter(e => e.groupId === grp.id)
+                    .reduce((acc, e) => acc + e.durationMinutes, 0);
+
+                if (grpMin > 0) {
+                    const widthPct = Math.min(100, (grpMin / normBase) * 100);
+                    const seg = document.createElement('div');
+                    seg.style.width = `${widthPct}%`;
+                    seg.style.backgroundColor = grp.color;
+                    seg.className = 'h-full transition-all duration-300';
+                    barContainer.appendChild(seg);
+
+                    const leg = document.createElement('div');
+                    leg.className = 'flex items-center gap-1';
+                    leg.innerHTML = `
+                        <span class="w-2 h-2 rounded-full inline-block" style="background-color:${grp.color}"></span>
+                        <span>${grp.name.split('.')[0]}: <strong class="text-slate-800">${formatMinutes(grpMin)}</strong></span>
+                    `;
+                    legendContainer.appendChild(leg);
+                }
+            });
+
+            if (totalDayMin === 0) {
+                legendContainer.innerHTML = `<span class="text-slate-400">За этот день пока нет учтенного времени</span>`;
+            }
+
+            // Кнопки групп 1-го уровня
+            const groupsGrid = document.getElementById('groupButtonsGrid');
+            groupsGrid.innerHTML = '';
+            state.categories.forEach(grp => {
+                const isSelected = grp.id === state.ui.selectedGroupId;
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                    isSelected
+                        ? 'bg-white shadow-2xs'
+                        : 'bg-slate-50/70 border-slate-200/80 opacity-80 hover:opacity-100 hover:bg-slate-50'
+                }`;
+                if (isSelected) {
+                    btn.style.borderColor = grp.color;
+                    btn.style.boxShadow = `0 0 0 1px ${grp.color}30`;
+                }
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full mb-1">
+                        <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${grp.color}"></span>
+                        <span class="text-[10px] text-slate-400">план ${grp.monthlyGoalHours}ч</span>
+                    </div>
+                    <div class="text-xs font-semibold text-slate-800 leading-snug line-clamp-1">${grp.name}</div>
+                `;
+                btn.addEventListener('click', () => {
+                    state.ui.selectedGroupId = grp.id;
+                    state.ui.selectedSubcategoryId = grp.subcategories[0]?.id || '';
+                    renderEntryTab();
+                });
+                groupsGrid.appendChild(btn);
+            });
+
+            // Пилюли подкатегорий 2-го уровня
+            const activeGroup = getGroupById(state.ui.selectedGroupId);
+            const pillsContainer = document.getElementById('subcategoryPillsContainer');
+            pillsContainer.innerHTML = '';
+
+            activeGroup.subcategories.forEach(sub => {
+                const isSelected = sub.id === state.ui.selectedSubcategoryId;
+                const pill = document.createElement('button');
+                pill.type = 'button';
+                pill.className = `px-3 py-1.5 rounded-xl text-xs font-medium transition border ${
+                    isSelected
+                        ? 'font-semibold shadow-2xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200/80 hover:bg-slate-100 hover:text-slate-900'
+                }`;
+                if (isSelected) {
+                    pill.style.backgroundColor = `${activeGroup.color}14`;
+                    pill.style.borderColor = activeGroup.color;
+                    pill.style.color = activeGroup.color;
+                }
+                pill.textContent = sub.name;
+                pill.addEventListener('click', () => {
+                    state.ui.selectedSubcategoryId = sub.id;
+                    renderEntryTab();
+                });
+                pillsContainer.appendChild(pill);
+            });
+
+            const activeSub = getSubcategoryById(state.ui.selectedGroupId, state.ui.selectedSubcategoryId);
+            document.getElementById('selectedCategoryLabel').textContent = `${activeGroup.name.split('.')[0]} • ${activeSub.name}`;
+
+            // Отображение конструктора длительности
+            renderDurationDisplay();
+
+            // Список сегодняшних записей внизу вкладки
+            const listEl = document.getElementById('todayEntriesList');
+            listEl.innerHTML = '';
+
+            if (dayEntries.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-6 text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
+                        Нет записей за выбранный день. Добавьте первую запись выше.
+                    </div>
+                `;
+            } else {
+                dayEntries.forEach(entry => {
+                    const grp = getGroupById(entry.groupId);
+                    const sub = getSubcategoryById(entry.groupId, entry.subcategoryId);
+                    const item = document.createElement('div');
+                    item.className = 'bg-slate-50/80 border border-slate-200/70 rounded-xl p-2.5 flex items-center justify-between gap-2';
+                    item.innerHTML = `
+                        <div class="flex items-start gap-2.5 min-w-0">
+                            <span class="w-1.5 h-8 rounded-full shrink-0 mt-0.5" style="background-color: ${grp.color}"></span>
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-xs font-semibold text-slate-800 truncate">${sub.name}</span>
+                                    <span class="text-[10px] text-slate-400">(${grp.name.split('.')[0]})</span>
+                                </div>
+                                <div class="text-[11px] text-slate-500 truncate">${entry.note ? escapeHtml(entry.note) : 'Без заметки'}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="text-xs font-bold text-slate-800 bg-white border border-slate-200/80 px-2 py-1 rounded-lg">${formatMinutes(entry.durationMinutes)}</span>
+                            <button data-del-id="${entry.id}" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition" title="Удалить">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    `;
+                    item.querySelector('[data-del-id]').addEventListener('click', () => {
+                        deleteEntryById(entry.id);
+                    });
+                    listEl.appendChild(item);
+                });
+            }
+
+            lucide.createIcons();
+        }
+
+        function renderDurationDisplay() {
+            const mins = state.ui.currentDurationMinutes;
+            document.getElementById('durationDisplayBig').textContent = formatMinutes(mins);
+            document.getElementById('durationDisplayMinutes').textContent = `Всего: ${mins} мин.`;
+        }
+
+        /**
+         * Рендер Вкладки 2: «Журнал»
+         */
+        function renderJournalTab() {
+            const groupFilterEl = document.getElementById('journalGroupFilter');
+            const currentVal = state.ui.journalGroupFilter;
+            groupFilterEl.innerHTML = `<option value="all">Все группы категорий</option>`;
+            state.categories.forEach(grp => {
+                const opt = document.createElement('option');
+                opt.value = grp.id;
+                opt.textContent = grp.name;
+                groupFilterEl.appendChild(opt);
+            });
+            groupFilterEl.value = currentVal;
+
+            // Фильтрация по периоду
+            const today = getLocalDateString();
+            let minDate = '0000-00-00';
+            if (state.ui.journalPeriod === 'week') {
+                minDate = shiftDateString(today, -6);
+            } else if (state.ui.journalPeriod === 'month') {
+                minDate = shiftDateString(today, -29);
+            }
+
+            const filtered = state.entries.filter(e => {
+                const matchPeriod = e.date >= minDate;
+                const matchGroup = state.ui.journalGroupFilter === 'all' || e.groupId === state.ui.journalGroupFilter;
+                return matchPeriod && matchGroup;
+            });
+
+            const totalMinutes = filtered.reduce((acc, e) => acc + e.durationMinutes, 0);
+            document.getElementById('journalSummaryBadge').textContent = `Итого: ${formatMinutes(totalMinutes)}`;
+
+            // Группировка по дате (от новых к старым)
+            const groupedByDate = {};
+            filtered.forEach(e => {
+                if (!groupedByDate[e.date]) groupedByDate[e.date] = [];
+                groupedByDate[e.date].push(e);
+            });
+
+            const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
+            const container = document.getElementById('journalDaysContainer');
+            container.innerHTML = '';
+
+            if (sortedDates.length === 0) {
+                container.innerHTML = `
+                    <div class="bg-white border border-slate-200/90 rounded-2xl p-8 text-center space-y-1.5 shadow-xs">
+                        <div class="text-slate-700 text-sm font-semibold">Записей не найдено</div>
+                        <p class="text-xs text-slate-400">Измените фильтр периода или добавьте новые записи на вкладке «Ввод».</p>
+                    </div>
+                `;
+                return;
+            }
+
+            sortedDates.forEach(dateStr => {
+                const dayList = groupedByDate[dateStr].sort((a, b) => b.createdAt - a.createdAt);
+                const daySum = dayList.reduce((acc, e) => acc + e.durationMinutes, 0);
+
+                const dayCard = document.createElement('div');
+                dayCard.className = 'bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs';
+
+                const header = document.createElement('div');
+                header.className = 'bg-slate-50/90 px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between';
+                header.innerHTML = `
+                    <span class="text-xs font-bold text-slate-800">${formatHumanDate(dateStr)}</span>
+                    <span class="text-xs font-semibold text-slate-600">${formatMinutes(daySum)}</span>
+                `;
+                dayCard.appendChild(header);
+
+                const itemsWrapper = document.createElement('div');
+                itemsWrapper.className = 'divide-y divide-slate-100';
+
+                dayList.forEach(entry => {
+                    const grp = getGroupById(entry.groupId);
+                    const sub = getSubcategoryById(entry.groupId, entry.subcategoryId);
+
+                    const row = document.createElement('div');
+                    row.className = 'p-3 flex items-center justify-between gap-2 hover:bg-slate-50/60 transition';
+                    row.innerHTML = `
+                        <div class="flex items-start gap-2.5 min-w-0">
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0 mt-1" style="background-color: ${grp.color}"></span>
+                            <div class="min-w-0">
+                                <div class="text-xs font-semibold text-slate-900">${sub.name}</div>
+                                <div class="text-[11px] text-slate-400">${grp.name}</div>
+                                ${entry.note ? `<div class="text-[11px] text-slate-600 mt-0.5 break-words">${escapeHtml(entry.note)}</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                            <span class="text-xs font-bold text-slate-800 px-2 py-1 rounded-lg bg-slate-50 border border-slate-200/80 mr-1">${formatMinutes(entry.durationMinutes)}</span>
+                            <button data-edit-id="${entry.id}" class="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg transition" title="Редактировать">
+                                <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button data-del-id="${entry.id}" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition" title="Удалить">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    `;
+
+                    row.querySelector('[data-edit-id]').addEventListener('click', () => openEditModal(entry.id));
+                    row.querySelector('[data-del-id]').addEventListener('click', () => deleteEntryById(entry.id));
+                    itemsWrapper.appendChild(row);
+                });
+
+                dayCard.appendChild(itemsWrapper);
+                container.appendChild(dayCard);
+            });
+
+            lucide.createIcons();
+        }
+
+        /**
+         * Рендер Вкладки 3: «Аналитика»
+         */
+        function renderAnalyticsTab() {
+            const today = getLocalDateString();
+            const isWeek = state.ui.analyticsPeriod === 'week';
+            const daysCount = isWeek ? 7 : 30;
+            const startDate = shiftDateString(today, -(daysCount - 1));
+
+            const periodEntries = state.entries.filter(e => e.date >= startDate && e.date <= today);
+            const totalMin = periodEntries.reduce((acc, e) => acc + e.durationMinutes, 0);
+
+            const activeDaysSet = new Set(periodEntries.map(e => e.date));
+            const activeDaysNum = Math.max(1, activeDaysSet.size);
+
+            const productiveMin = periodEntries
+                .filter(e => e.groupId === 'grp-1' || e.groupId === 'grp-2')
+                .reduce((acc, e) => acc + e.durationMinutes, 0);
+            const prodPct = totalMin > 0 ? Math.round((productiveMin / totalMin) * 100) : 0;
+
+            document.getElementById('kpiTotalHours').textContent = `${formatHoursDecimal(totalMin)} ч`;
+            document.getElementById('kpiDaysCount').textContent = `${activeDaysSet.size} актив. дн.`;
+            document.getElementById('kpiAvgDay').textContent = `${formatHoursDecimal(totalMin / activeDaysNum)} ч`;
+            document.getElementById('kpiProductiveShare').textContent = `${prodPct}%`;
+
+            // Блок «План / Факт на месяц»
+            const currentYearMonth = today.slice(0, 7);
+            const monthEntries = state.entries.filter(e => e.date.startsWith(currentYearMonth));
+            const [y, m] = currentYearMonth.split('-').map(Number);
+            const monthName = new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+            document.getElementById('planMonthTitle').textContent = `Выполнение плана за ${monthName}`;
+
+            const planContainer = document.getElementById('planFactContainer');
+            planContainer.innerHTML = '';
+
+            state.categories.forEach(grp => {
+                const grpMonthMin = monthEntries
+                    .filter(e => e.groupId === grp.id)
+                    .reduce((acc, e) => acc + e.durationMinutes, 0);
+                const factHours = grpMonthMin / 60;
+                const goalHours = Math.max(1, Number(grp.monthlyGoalHours) || 1);
+                const pct = Math.min(100, Math.round((factHours / goalHours) * 100));
+
+                const row = document.createElement('div');
+                row.className = 'space-y-1.5';
+                row.innerHTML = `
+                    <div class="flex justify-between text-xs">
+                        <span class="font-medium text-slate-700 flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full" style="background-color: ${grp.color}"></span>
+                            ${grp.name}
+                        </span>
+                        <span class="text-slate-400">
+                            <strong class="text-slate-900">${factHours.toFixed(1)} ч</strong> / ${goalHours} ч (${pct}%)
+                        </span>
+                    </div>
+                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-300" style="width: ${pct}%; background-color: ${grp.color}"></div>
+                    </div>
+                `;
+                planContainer.appendChild(row);
+            });
+
+            renderDoughnutChart(periodEntries, totalMin);
+            renderBarChart(daysCount, today);
+        }
+
+        function renderDoughnutChart(periodEntries, totalMin) {
+            const ctx = document.getElementById('doughnutChart').getContext('2d');
+            if (doughnutChartInstance) {
+                doughnutChartInstance.destroy();
+            }
+
+            const labels = [];
+            const dataHours = [];
+            const bgColors = [];
+
+            state.categories.forEach(grp => {
+                const mins = periodEntries
+                    .filter(e => e.groupId === grp.id)
+                    .reduce((acc, e) => acc + e.durationMinutes, 0);
+                if (mins > 0) {
+                    labels.push(grp.name);
+                    dataHours.push(Number((mins / 60).toFixed(2)));
+                    bgColors.push(grp.color);
+                }
+            });
+
+            if (dataHours.length === 0) {
+                labels.push('Нет данных');
+                dataHours.push(1);
+                bgColors.push('#e2e8f0');
+            }
+
+            doughnutChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: dataHours,
+                        backgroundColor: bgColors,
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '66%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#475569',
+                                boxWidth: 10,
+                                padding: 12,
+                                font: { size: 11, family: 'Inter' }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if (totalMin === 0) return ' Нет записей';
+                                    const val = context.parsed;
+                                    const pct = Math.round((val * 60 / totalMin) * 100);
+                                    return ` ${val} ч (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Детализация по подкатегориям
+            const tableEl = document.getElementById('analyticsSubcatTable');
+            tableEl.innerHTML = '';
+
+            if (totalMin === 0) {
+                tableEl.innerHTML = `<div class="text-center text-slate-400 py-2">Нет данных за выбранный период</div>`;
+                return;
+            }
+
+            const subStats = [];
+            state.categories.forEach(grp => {
+                grp.subcategories.forEach(sub => {
+                    const mins = periodEntries
+                        .filter(e => e.groupId === grp.id && e.subcategoryId === sub.id)
+                        .reduce((acc, e) => acc + e.durationMinutes, 0);
+                    if (mins > 0) {
+                        subStats.push({
+                            groupName: grp.name,
+                            color: grp.color,
+                            subName: sub.name,
+                            mins
+                        });
+                    }
+                });
+            });
+
+            subStats.sort((a, b) => b.mins - a.mins);
+
+            subStats.forEach(st => {
+                const pct = Math.round((st.mins / totalMin) * 100);
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between py-1';
+                item.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="w-2 h-2 rounded-full shrink-0" style="background-color: ${st.color}"></span>
+                        <span class="text-slate-700 truncate">${st.subName}</span>
+                    </div>
+                    <div class="text-slate-400 shrink-0 font-medium">
+                        <span class="text-slate-900 font-semibold">${formatMinutes(st.mins)}</span> (${pct}%)
+                    </div>
+                `;
+                tableEl.appendChild(item);
+            });
+        }
+
+        function renderBarChart(daysCount, today) {
+            const ctx = document.getElementById('barChart').getContext('2d');
+            if (barChartInstance) {
+                barChartInstance.destroy();
+            }
+
+            const dateList = [];
+            const shortLabels = [];
+            for (let i = daysCount - 1; i >= 0; i--) {
+                const d = shiftDateString(today, -i);
+                dateList.push(d);
+                const [, m, day] = d.split('-');
+                shortLabels.push(`${day}.${m}`);
+            }
+
+            const datasets = state.categories.map(grp => {
+                const data = dateList.map(d => {
+                    const mins = state.entries
+                        .filter(e => e.date === d && e.groupId === grp.id)
+                        .reduce((acc, e) => acc + e.durationMinutes, 0);
+                    return Number((mins / 60).toFixed(2));
+                });
+                return {
+                    label: grp.name.split('.')[0],
+                    data: data,
+                    backgroundColor: grp.color,
+                    borderRadius: 4
+                };
+            });
+
+            barChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: shortLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: { display: false },
+                            ticks: { color: '#64748b', font: { size: 10 } }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            grid: { color: '#f1f5f9' },
+                            ticks: {
+                                color: '#64748b',
+                                font: { size: 10 },
+                                callback: v => v + 'ч'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#475569',
+                                boxWidth: 10,
+                                font: { size: 10, family: 'Inter' }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * Рендер Вкладки 4: «Настройки»
+         */
+        function renderSettingsTab() {
+            const listEl = document.getElementById('settingsCategoriesList');
+            const parentSelect = document.getElementById('newSubcatParentSelect');
+            listEl.innerHTML = '';
+            parentSelect.innerHTML = '';
+
+            state.categories.forEach(grp => {
+                const opt = document.createElement('option');
+                opt.value = grp.id;
+                opt.textContent = grp.name;
+                parentSelect.appendChild(opt);
+
+                const card = document.createElement('div');
+                card.className = 'bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 space-y-2';
+
+                const subPillsHtml = grp.subcategories.map(sub => `
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200/80 text-[11px] text-slate-700">
+                        ${escapeHtml(sub.name)}
+                        ${grp.subcategories.length > 1 ? `
+                            <button data-del-sub="${sub.id}" data-grp="${grp.id}" class="text-slate-400 hover:text-rose-600 ml-0.5" title="Удалить подкатегорию">
+                                &times;
+                            </button>
+                        ` : ''}
+                    </span>
+                `).join('');
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${grp.color}"></span>
+                            <span class="text-xs font-bold text-slate-800 truncate">${escapeHtml(grp.name)}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                            <span class="text-[11px] text-slate-500">План (ч/мес):</span>
+                            <input type="number" data-goal-grp="${grp.id}" value="${grp.monthlyGoalHours}" min="1" max="600" class="w-14 bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs text-center font-semibold text-slate-900">
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 pt-1">
+                        ${subPillsHtml}
+                    </div>
+                `;
+
+                const goalInput = card.querySelector(`[data-goal-grp="${grp.id}"]`);
+                goalInput.addEventListener('change', (e) => {
+                    const val = Math.max(1, parseInt(e.target.value, 10) || 10);
+                    grp.monthlyGoalHours = val;
+                    saveState();
+                    showToast('Месячный план обновлен');
+                });
+
+                card.querySelectorAll('[data-del-sub]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const subId = btn.getAttribute('data-del-sub');
+                        grp.subcategories = grp.subcategories.filter(s => s.id !== subId);
+                        saveState();
+                        renderSettingsTab();
+                        showToast('Подкатегория удалена');
+                    });
+                });
+
+                listEl.appendChild(card);
+            });
+        }
+
+        /**
+         * Добавление, редактирование и удаление записей
+         */
+        function handleSaveNewEntry() {
+            const mins = state.ui.currentDurationMinutes;
+            if (mins <= 0) {
+                showToast('Укажите длительность больше 0 мин');
+                return;
+            }
+            const noteInput = document.getElementById('entryNoteInput');
+            const newEntry = {
+                id: 'ent-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+                date: state.ui.selectedDate,
+                groupId: state.ui.selectedGroupId,
+                subcategoryId: state.ui.selectedSubcategoryId,
+                durationMinutes: mins,
+                note: noteInput.value.trim(),
+                createdAt: Date.now()
+            };
+
+            state.entries.push(newEntry);
+            noteInput.value = '';
+            saveState();
+            renderEntryTab();
+            showToast('Запись добавлена в хронометраж');
+        }
+
+        function deleteEntryById(entryId) {
+            state.entries = state.entries.filter(e => e.id !== entryId);
+            saveState();
+            refreshActiveTab();
+            showToast('Запись удалена');
+        }
+
+        /**
+         * Модальное окно редактирования записи в Журнале
+         */
+        function openEditModal(entryId) {
+            const entry = state.entries.find(e => e.id === entryId);
+            if (!entry) return;
+
+            document.getElementById('editEntryId').value = entry.id;
+            document.getElementById('editEntryDate').value = entry.date;
+            document.getElementById('editEntryMinutes').value = entry.durationMinutes;
+            document.getElementById('editEntryNote').value = entry.note || '';
+
+            const groupSelect = document.getElementById('editEntryGroup');
+            const subSelect = document.getElementById('editEntrySubcat');
+
+            groupSelect.innerHTML = '';
+            state.categories.forEach(grp => {
+                const opt = document.createElement('option');
+                opt.value = grp.id;
+                opt.textContent = grp.name;
+                groupSelect.appendChild(opt);
+            });
+            groupSelect.value = entry.groupId;
+
+            function populateEditSubcats(grpId, selectedSubId) {
+                subSelect.innerHTML = '';
+                const g = getGroupById(grpId);
+                g.subcategories.forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.id;
+                    opt.textContent = s.name;
+                    subSelect.appendChild(opt);
+                });
+                if (selectedSubId) subSelect.value = selectedSubId;
+            }
+
+            populateEditSubcats(entry.groupId, entry.subcategoryId);
+
+            groupSelect.onchange = () => {
+                populateEditSubcats(groupSelect.value, null);
+            };
+
+            const modal = document.getElementById('editModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeEditModal() {
+            const modal = document.getElementById('editModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function saveEditedEntry() {
+            const id = document.getElementById('editEntryId').value;
+            const entry = state.entries.find(e => e.id === id);
+            if (!entry) return;
+
+            const mins = Math.max(1, parseInt(document.getElementById('editEntryMinutes').value, 10) || 15);
+            entry.date = document.getElementById('editEntryDate').value || entry.date;
+            entry.groupId = document.getElementById('editEntryGroup').value;
+            entry.subcategoryId = document.getElementById('editEntrySubcat').value;
+            entry.durationMinutes = mins;
+            entry.note = document.getElementById('editEntryNote').value.trim();
+
+            saveState();
+            closeEditModal();
+            refreshActiveTab();
+            showToast('Изменения сохранены');
+        }
+
+        /**
+         * Кастомное модальное окно подтверждения
+         */
+        let confirmCallback = null;
+        function openConfirmModal(title, text, onConfirm) {
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalText').textContent = text;
+            confirmCallback = onConfirm;
+            const modal = document.getElementById('confirmModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            confirmCallback = null;
+        }
+
+        /**
+         * Выгрузка в CSV (с UTF-8 BOM для корректного открытия кириллицы в Excel)
+         */
+        function exportToCSV() {
+            if (!state.entries.length) {
+                showToast('Нет записей для выгрузки');
+                return;
+            }
+            const headers = ['Дата', 'Группа', 'Подкатегория', 'Минуты', 'Часы', 'Заметка'];
+            const sorted = [...state.entries].sort((a, b) => b.date.localeCompare(a.date));
+
+            const rows = sorted.map(e => {
+                const grp = getGroupById(e.groupId);
+                const sub = getSubcategoryById(e.groupId, e.subcategoryId);
+                const hours = (e.durationMinutes / 60).toFixed(2).replace('.', ',');
+                const cleanNote = (e.note || '').replace(/"/g, '""');
+                return [
+                    e.date,
+                    `"${grp.name.replace(/"/g, '""')}"`,
+                    `"${sub.name.replace(/"/g, '""')}"`,
+                    e.durationMinutes,
+                    `"${hours}"`,
+                    `"${cleanNote}"`
+                ].join(';');
+            });
+
+            const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `lyubishchev_chronos_${getLocalDateString()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('CSV-файл выгружен');
+        }
+
+        /**
+         * Экспорт и импорт резервной копии JSON
+         */
+        function exportToJSON() {
+            const dataStr = JSON.stringify({
+                categories: state.categories,
+                entries: state.entries,
+                exportedAt: new Date().toISOString()
+            }, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `lyubishchev_backup_${getLocalDateString()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Резервная копия JSON сохранена');
+        }
+
+        function importFromJSON(file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const parsed = JSON.parse(ev.target.result);
+                    if (!Array.isArray(parsed.categories) || !Array.isArray(parsed.entries)) {
+                        showToast('Неверный формат файла JSON');
+                        return;
+                    }
+                    state.categories = parsed.categories;
+                    state.entries = parsed.entries;
+                    state.isDemoData = false;
+                    saveState();
+                    refreshActiveTab();
+                    showToast('Данные успешно восстановлены');
+                } catch (err) {
+                    showToast('Ошибка чтения JSON файла');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        /**
+         * Переключение вкладок
+         */
+        function switchTab(tabName) {
+            state.ui.activeTab = tabName;
+
+            document.querySelectorAll('.tab-section').forEach(sec => {
+                sec.classList.add('hidden');
+            });
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+                const isTarget = btn.getAttribute('data-tab') === tabName;
+                if (isTarget) {
+                    btn.className = 'nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-900 bg-slate-100 font-semibold transition';
+                } else {
+                    btn.className = 'nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-400 hover:text-slate-700 font-medium transition';
+                }
+            });
+
+            refreshActiveTab();
+        }
+
+        function refreshActiveTab() {
+            const tab = state.ui.activeTab;
+            if (tab === 'entry') renderEntryTab();
+            else if (tab === 'journal') renderJournalTab();
+            else if (tab === 'analytics') renderAnalyticsTab();
+            else if (tab === 'settings') renderSettingsTab();
+        }
+
+        /**
+         * Инициализация всех обработчиков событий
+         */
+        function initEventListeners() {
+            // Нижняя навигация
+            document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    switchTab(btn.getAttribute('data-tab'));
+                });
+            });
+
+            // Переключение даты на вкладке «Ввод»
+            document.getElementById('btnPrevDay').addEventListener('click', () => {
+                state.ui.selectedDate = shiftDateString(state.ui.selectedDate, -1);
+                renderEntryTab();
+            });
+            document.getElementById('btnNextDay').addEventListener('click', () => {
+                state.ui.selectedDate = shiftDateString(state.ui.selectedDate, 1);
+                renderEntryTab();
+            });
+            document.getElementById('btnToday').addEventListener('click', () => {
+                state.ui.selectedDate = getLocalDateString();
+                renderEntryTab();
+            });
+            document.getElementById('entryDateInput').addEventListener('change', (e) => {
+                if (e.target.value) {
+                    state.ui.selectedDate = e.target.value;
+                    renderEntryTab();
+                }
+            });
+
+            // Кнопки набора длительности
+            document.querySelectorAll('.dur-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const add = parseInt(btn.getAttribute('data-add-min'), 10);
+                    state.ui.currentDurationMinutes = Math.min(1440, state.ui.currentDurationMinutes + add);
+                    renderDurationDisplay();
+                });
+            });
+            document.getElementById('btnMinus15').addEventListener('click', () => {
+                state.ui.currentDurationMinutes = Math.max(0, state.ui.currentDurationMinutes - 15);
+                renderDurationDisplay();
+            });
+            document.getElementById('btnResetDuration').addEventListener('click', () => {
+                state.ui.currentDurationMinutes = 0;
+                renderDurationDisplay();
+            });
+
+            // Сохранение записи
+            document.getElementById('btnSaveEntry').addEventListener('click', handleSaveNewEntry);
+            document.getElementById('entryNoteInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleSaveNewEntry();
+            });
+
+            // Фильтры на вкладке «Журнал»
+            document.querySelectorAll('.j-period-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.ui.journalPeriod = btn.getAttribute('data-jperiod');
+                    document.querySelectorAll('.j-period-btn').forEach(b => {
+                        b.className = b === btn
+                            ? 'j-period-btn py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-2xs transition'
+                            : 'j-period-btn py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900 transition';
+                    });
+                    renderJournalTab();
+                });
+            });
+            document.getElementById('journalGroupFilter').addEventListener('change', (e) => {
+                state.ui.journalGroupFilter = e.target.value;
+                renderJournalTab();
+            });
+
+            // Переключатель периода на вкладке «Аналитика»
+            document.querySelectorAll('.a-period-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.ui.analyticsPeriod = btn.getAttribute('data-aperiod');
+                    document.querySelectorAll('.a-period-btn').forEach(b => {
+                        b.className = b === btn
+                            ? 'a-period-btn py-1.5 rounded-lg text-xs font-semibold bg-white text-slate-900 shadow-2xs transition'
+                            : 'a-period-btn py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-900 transition';
+                    });
+                    renderAnalyticsTab();
+                });
+            });
+
+            // Добавление подкатегории в Настройках
+            document.getElementById('btnAddSubcat').addEventListener('click', () => {
+                const parentId = document.getElementById('newSubcatParentSelect').value;
+                const nameInput = document.getElementById('newSubcatNameInput');
+                const name = nameInput.value.trim();
+                if (!name) {
+                    showToast('Введите название подкатегории');
+                    return;
+                }
+                const grp = getGroupById(parentId);
+                grp.subcategories.push({
+                    id: 'sub-' + Date.now(),
+                    name
+                });
+                nameInput.value = '';
+                saveState();
+                renderSettingsTab();
+                showToast('Подкатегория добавлена');
+            });
+
+            // Добавление новой основной группы
+            document.getElementById('btnAddGroup').addEventListener('click', () => {
+                const nameInput = document.getElementById('newGroupNameInput');
+                const colorInput = document.getElementById('newGroupColorInput');
+                const goalInput = document.getElementById('newGroupGoalInput');
+                const name = nameInput.value.trim();
+                if (!name) {
+                    showToast('Введите название новой группы');
+                    return;
+                }
+                const goal = Math.max(1, parseInt(goalInput.value, 10) || 20);
+                const newGrpId = 'grp-' + Date.now();
+                state.categories.push({
+                    id: newGrpId,
+                    name,
+                    color: colorInput.value || '#8b5cf6',
+                    monthlyGoalHours: goal,
+                    subcategories: [
+                        { id: 'sub-' + Date.now() + '-1', name: 'Основное' }
+                    ]
+                });
+                nameInput.value = '';
+                saveState();
+                renderSettingsTab();
+                showToast('Новая группа создана');
+            });
+
+            // Экспорт / Импорт
+            document.getElementById('btnExportCSV').addEventListener('click', exportToCSV);
+            document.getElementById('btnExportJSON').addEventListener('click', exportToJSON);
+            document.getElementById('inputImportJSON').addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    importFromJSON(e.target.files[0]);
+                    e.target.value = '';
+                }
+            });
+
+            // Очистка и восстановление тестовых данных
+            document.getElementById('btnClearDemoData').addEventListener('click', () => {
+                openConfirmModal(
+                    'Очистить журнал записей?',
+                    'Все текущие записи времени будут удалены. Настроенные вами категории сохранятся.',
+                    () => {
+                        state.entries = [];
+                        state.isDemoData = false;
+                        saveState();
+                        refreshActiveTab();
+                        showToast('Журнал записей очищен');
+                    }
+                );
+            });
+
+            document.getElementById('btnRestoreDemoData').addEventListener('click', () => {
+                state.categories = getDefaultCategories();
+                state.entries = generateSeedEntries();
+                state.isDemoData = true;
+                saveState();
+                refreshActiveTab();
+                showToast('Тестовые данные за 5 дней загружены');
+            });
+
+            // Модальное окно редактирования
+            document.getElementById('btnCloseEditModal').addEventListener('click', closeEditModal);
+            document.getElementById('btnCancelEdit').addEventListener('click', closeEditModal);
+            document.getElementById('btnSaveEdit').addEventListener('click', saveEditedEntry);
+
+            // Модальное окно подтверждения
+            document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirmModal);
+            document.getElementById('btnConfirmOk').addEventListener('click', () => {
+                if (typeof confirmCallback === 'function') confirmCallback();
+                closeConfirmModal();
+            });
+        }
+
+        // Запуск приложения при загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            updateDemoBadge();
+            initEventListeners();
+            renderEntryTab();
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
