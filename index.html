@@ -296,6 +296,48 @@
             <!-- ==================== ВКЛАДКА 4: НАСТРОЙКИ ==================== -->
             <section id="tab-settings" class="tab-section hidden space-y-4 fade-in">
                 
+                <!-- Блок облачной синхронизации (Google Sheets) -->
+                <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900">Облачная синхронизация</h2>
+                            <p class="text-[11px] text-slate-400">Связь с Google Таблицей через Webhook</p>
+                        </div>
+                        <i data-lucide="cloud" class="w-4 h-4 text-slate-400"></i>
+                    </div>
+
+                    <div class="space-y-2.5 text-xs">
+                        <div>
+                            <label for="webhookUrlInput" class="block text-slate-500 mb-1">URL веб-приложения Google Apps Script:</label>
+                            <input type="url" id="webhookUrlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-slate-400">
+                        </div>
+
+                        <div class="flex items-center justify-between py-1">
+                            <span class="text-slate-700 font-medium">Автосинхронизация при изменениях</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="autoSyncToggle" class="sr-only peer">
+                                <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                            </label>
+                        </div>
+
+                        <div class="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-100">
+                            <span id="syncStatusText">Статус: Не синхронизировано</span>
+                            <span id="syncTimeText"></span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 pt-1">
+                            <button id="btnPushCloud" class="py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold flex items-center justify-center gap-1.5 transition">
+                                <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i>
+                                Отправить в Таблицу
+                            </button>
+                            <button id="btnPullCloud" class="py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/90 font-semibold flex items-center justify-center gap-1.5 transition">
+                                <i data-lucide="download-cloud" class="w-3.5 h-3.5"></i>
+                                Загрузить из Таблицы
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Управление категориями и месячными планами -->
                 <div class="bg-white border border-slate-200/90 rounded-2xl p-3.5 space-y-3 shadow-xs">
                     <div class="flex items-center justify-between">
@@ -475,9 +517,11 @@
 
     <script>
         /**
-         * Ключ хранения в localStorage
+         * Ключи хранения в localStorage
          */
         const STORAGE_KEY = 'lyubishchev_tracker_v1';
+        const WEBHOOK_URL_KEY = 'lyubishchev_webhook_url';
+        const AUTO_SYNC_KEY = 'lyubishchev_autosync_enabled';
 
         /**
          * Вспомогательные функции работы с локальной датой в формате ГГГГ-ММ-ДД
@@ -696,6 +740,11 @@
                 };
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
                 updateDemoBadge();
+
+                // Автосинхронизация при изменениях (если включена)
+                if (localStorage.getItem(AUTO_SYNC_KEY) === 'true') {
+                    triggerCloudPush(true);
+                }
             } catch (e) {
                 console.error('Ошибка сохранения в localStorage:', e);
             }
@@ -754,6 +803,92 @@
                 badge.classList.remove('hidden');
             } else {
                 badge.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Функции облачной синхронизации (Google Sheets Webhook)
+         */
+        async function triggerCloudPush(isSilent = false) {
+            const webhookUrl = localStorage.getItem(WEBHOOK_URL_KEY);
+            if (!webhookUrl) {
+                if (!isSilent) showToast('Укажите URL вебхука в настройках');
+                return;
+            }
+
+            const statusText = document.getElementById('syncStatusText');
+            const timeText = document.getElementById('syncTimeText');
+            if (!isSilent && statusText) statusText.textContent = 'Статус: Отправка...';
+
+            try {
+                const payload = JSON.stringify({
+                    categories: state.categories,
+                    entries: state.entries
+                });
+
+                // Отправляем с text/plain, чтобы избежать preflight OPTIONS запроса (CORS)
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8'
+                    },
+                    body: payload
+                });
+
+                const result = await response.json();
+                if (result.status === 'ok' || result.success || response.ok) {
+                    const nowStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                    if (statusText) statusText.textContent = 'Статус: Синхронизировано';
+                    if (timeText) timeText.textContent = `Успешно: ${nowStr}`;
+                    if (!isSilent) showToast('Данные успешно отправлены в Таблицу');
+                } else {
+                    throw new Error(result.message || 'Ошибка сервера');
+                }
+            } catch (err) {
+                console.error('Cloud Push error:', err);
+                if (statusText) statusText.textContent = 'Статус: Ошибка отправки';
+                if (!isSilent) showToast('Ошибка отправки в Google Таблицу');
+            }
+        }
+
+        async function triggerCloudPull() {
+            const webhookUrl = localStorage.getItem(WEBHOOK_URL_KEY);
+            if (!webhookUrl) {
+                showToast('Укажите URL вебхука в настройках');
+                return;
+            }
+
+            const statusText = document.getElementById('syncStatusText');
+            const timeText = document.getElementById('syncTimeText');
+            if (statusText) statusText.textContent = 'Статус: Загрузка...';
+
+            try {
+                const response = await fetch(webhookUrl);
+                const result = await response.json();
+
+                if (result.status === 'ok' && result.data) {
+                    const cloudData = typeof result.data === 'string' ? JSON.parse(result.data) : result.data;
+                    if (Array.isArray(cloudData.categories) && Array.isArray(cloudData.entries)) {
+                        state.categories = cloudData.categories;
+                        state.entries = cloudData.entries;
+                        state.isDemoData = false;
+                        saveState();
+                        refreshActiveTab();
+
+                        const nowStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                        if (statusText) statusText.textContent = 'Статус: Загружено из облака';
+                        if (timeText) timeText.textContent = `Обновлено: ${nowStr}`;
+                        showToast('Данные успешно загружены из Google Таблицы');
+                    } else {
+                        throw new Error('Некорректная структура данных в облаке');
+                    }
+                } else {
+                    throw new Error(result.message || 'Ответ не содержит статус ok');
+                }
+            } catch (err) {
+                console.error('Cloud Pull error:', err);
+                if (statusText) statusText.textContent = 'Статус: Ошибка загрузки';
+                showToast('Не удалось загрузить данные из Google Таблицы');
             }
         }
 
@@ -1286,6 +1421,23 @@
          * Рендер Вкладки 4: «Настройки»
          */
         function renderSettingsTab() {
+            // Настройка полей синхронизации
+            const webhookInput = document.getElementById('webhookUrlInput');
+            const autoSyncToggle = document.getElementById('autoSyncToggle');
+
+            webhookInput.value = localStorage.getItem(WEBHOOK_URL_KEY) || '';
+            autoSyncToggle.checked = localStorage.getItem(AUTO_SYNC_KEY) === 'true';
+
+            webhookInput.onchange = (e) => {
+                localStorage.setItem(WEBHOOK_URL_KEY, e.target.value.trim());
+                showToast('URL вебхука сохранен');
+            };
+
+            autoSyncToggle.onchange = (e) => {
+                localStorage.setItem(AUTO_SYNC_KEY, e.target.checked ? 'true' : 'false');
+                showToast(e.target.checked ? 'Автосинхронизация включена' : 'Автосинхронизация выключена');
+            };
+
             const listEl = document.getElementById('settingsCategoriesList');
             const parentSelect = document.getElementById('newSubcatParentSelect');
             listEl.innerHTML = '';
@@ -1648,6 +1800,10 @@
             document.getElementById('entryNoteInput').addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') handleSaveNewEntry();
             });
+
+            // Кнопки облачной синхронизации
+            document.getElementById('btnPushCloud').addEventListener('click', () => triggerCloudPush(false));
+            document.getElementById('btnPullCloud').addEventListener('click', triggerCloudPull);
 
             // Фильтры на вкладке «Журнал»
             document.querySelectorAll('.j-period-btn').forEach(btn => {
